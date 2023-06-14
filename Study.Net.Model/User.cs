@@ -4,6 +4,8 @@ namespace Study.Net.Model;
 
 public class User:IdentityUser<Guid>
 {
+    public long JwtVersion { get; set; }
+
     public List<Article> Articles { get; set; } = new List<Article>();
 
     public bool isDeleted { get; set; }

@@ -9,4 +9,5 @@ public record ArticleDTO
     public int ViewCount { get; set; }
     public int LikeCount { get; set; }
     public string TypeName { get; set; }
+    public string UserName { get; set; }
 }

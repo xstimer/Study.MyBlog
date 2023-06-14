@@ -1,12 +1,19 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using Study.Net.BaseRepository;
 using Study.Net.BaseService;
+using Study.Net.Blog.Filters;
 using Study.Net.EFCoreEnvironment.DbContexts;
 using Study.Net.IBaseRepository;
 using Study.Net.IBaseService;
 using Study.Net.Model;
+using Study.Net.Utility;
 using Study.Net.Utility._Mapper;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,11 +24,64 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+//启动swagger鉴权组件
+builder.Services.AddSwaggerGen(opt =>
+{
+    var scheme = new OpenApiSecurityScheme()
+    {
+        Description = $"Authorization header \r\n Example:'Bearer xxxxxxxxxxxxxxxx'",
+        Reference = new OpenApiReference() { Type = ReferenceType.SecurityScheme, Id = "Authorization" },
+        Scheme = "oauth2",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey
+
+    };
+    opt.AddSecurityDefinition("Authorization", scheme);
+
+    var requirment = new OpenApiSecurityRequirement();
+    requirment[scheme] = new List<string>();
+    opt.AddSecurityRequirement(requirment);
+});
+
+//读取配置文件中Jwt的信息，然后通过Configuration配置系统注入到Controller层进行授权
+builder.Services.Configure<JwtSetting>(builder.Configuration.GetSection("Jwt"));
+
+//配置jwt：鉴别权限
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(opt =>
+    {
+        var jwtSetting = builder.Configuration.GetSection("Jwt").Get<JwtSetting>();
+        byte[] keyBytes = Encoding.UTF8.GetBytes(jwtSetting.SecKey);
+        var secKey = new SymmetricSecurityKey(keyBytes);
+        opt.TokenValidationParameters = new TokenValidationParameters()
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtSetting.Issuer,    //表示颁发Token的web应用程序
+
+            ValidateAudience = true,
+            ValidAudience = jwtSetting.Audience,//Token的受理者
+
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = secKey,
+            ClockSkew = TimeSpan.FromSeconds(jwtSetting.ExpireSeconds)
+        };
+    });
+
+
 builder.Services.AddDbContext<MySqlDbContext>(opt =>
 {
     opt.UseMySql(builder.Configuration.GetSection("connstr").Value, new MySqlServerVersion(new Version(8, 0, 33)));
     
 });
+
+//注入Filter服务
+builder.Services.Configure<MvcOptions>(opt =>
+{
+    opt.Filters.Add<JwtVersionCheckFilter>();
+});
+
 
 //注入Automapper
 builder.Services.AddAutoMapper(typeof(DTOMapper));
@@ -32,6 +92,13 @@ builder.Services.AddCustomIOC();
 //identity注入
 builder.Services.AddIdentityIOC();
 
+//注入Redis缓存服务
+builder.Services.AddStackExchangeRedisCache(opt =>
+{
+    opt.Configuration = "localhost";    //缓存地址
+    opt.InstanceName = "blog_";         //缓存前缀
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -41,9 +108,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//添加到管道中
+app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseHttpsRedirection();
 
 app.MapControllers();
 

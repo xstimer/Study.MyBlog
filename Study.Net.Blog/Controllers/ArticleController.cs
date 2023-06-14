@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Study.Net.BaseService;
@@ -22,6 +23,7 @@ namespace Study.Net.Blog.Controllers
         }
 
         [HttpGet("Articles")]
+        [Authorize]
         public async Task<ActionResult<ApiResult>> GetArticles()
         {
             var data = await _articleService.FindAllAsync();
@@ -39,6 +41,7 @@ namespace Study.Net.Blog.Controllers
         }
 
         [HttpPost("Create")]
+        [Authorize]
         public async Task<ActionResult<ApiResult>> CreateArticle(string title, string content, Guid TypeId)
         {
             Article article = new Article()
@@ -58,6 +61,7 @@ namespace Study.Net.Blog.Controllers
             return ApiResultHelper.Success(result);
         }
         [HttpDelete("Delete")]
+        [Authorize]
         public async Task<ActionResult<ApiResult>> Delete(Guid id)
         {
             Article article = await _articleService.FindOneAsync(id);
@@ -76,6 +80,7 @@ namespace Study.Net.Blog.Controllers
         }
 
         [HttpPut("Edit")]
+        [Authorize]
         public async Task<ActionResult<ApiResult>>Edit(Guid id,string title,string content,Guid typeid)
         {
             var article = await _articleService.FindOneAsync(id);
